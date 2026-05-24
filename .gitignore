@@ -3,3 +3,4 @@ modelo.obj
 test/bench
 test/bench_o0
 *.o
+OPTIMIZATION_PLAN.md
