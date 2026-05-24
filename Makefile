@@ -1,5 +1,5 @@
 CC      = gcc
-CFLAGS  = -Wall -Wextra -Iinclude
+CFLAGS  = -Wall -Wextra -Iinclude -msse4.1
 LDFLAGS = -lSDL2 -lm
 TARGET  = visor
 SRC     = src/main.c src/loader.c src/renderer.c

@@ -1,14 +1,8 @@
-/*
- * main.c
- *
- * Copyright 2026 Alfred@mx
- * GPL v2
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 #include <SDL2/SDL.h>
+#include <smmintrin.h> // instrucciones para sse4.1
 
 #include "types.h"
 #include "renderer.h"
@@ -19,6 +13,32 @@ Vec3 *vertices    = NULL;
 int   num_vertices = 0;
 Cara *caras       = NULL;
 int   num_caras    = 0;
+
+// ------------------------------------------------------------
+// Referencia: versión con intrínsecas SSE4 (sin ensamblador)
+// __m128 infinito = _mm_set1_ps(1e30f);  // m128, 128 bits sse4, floats empaquetados usando _mm_set1_ps, empaqueta (1e30f)
+// for (int i = 0; i < n; i += 4)
+//     _mm_storeu_ps(&zbuffer[i], infinito);  // escribe 4 floats del registro infinito a &zbuffer[i]
+// ------------------------------------------------------------
+
+// optimizaciones para sse4 — inline ASM
+// limpia el zbuffer procesando 4 floats por ciclo en vez de 1
+static void limpiar_zbuffer(float *zbuffer, int n) {
+    float val = 1e30f;
+    int iteraciones = n / 4;
+    __asm__ volatile (
+        "movss %2, %%xmm0\n\t"          // carga val en el lane bajo de xmm0
+        "shufps $0, %%xmm0, %%xmm0\n\t" // copia el lane 0 a los 4 lanes: [val,val,val,val]
+        "1:\n\t"
+        "movups %%xmm0, (%0)\n\t"        // movups: copia xmm0 a la dirección en %0 (= *zbuffer)
+        "add $16, %0\n\t"               // avanza %0 en 16 bytes — 4 floats × 4 bytes
+        "dec %1\n\t"                    // decrementa %1 (iteraciones)
+        "jnz 1b\n\t"                    // jump if not zero: salta a 1 si ZF = 0 (quedan iteraciones)
+        : "+r"(zbuffer), "+r"(iteraciones)  // entrada/salida: +r expone zbuffer como %0, iteraciones como %1
+        : "m"(val)                          // m = acceso a memoria, val es %2
+        : "xmm0", "memory"                  // clobbers: xmm0 y memoria son modificados
+    );
+}
 
 int main(void) {
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
@@ -67,7 +87,6 @@ int main(void) {
     }
 
     if (cargar_obj("modelo.obj") != 0) {
-        printf("Error al cargar el modelo\n");
         free(zbuffer);
         SDL_DestroyWindow(window);
         SDL_Quit();
@@ -98,7 +117,7 @@ int main(void) {
         }
 
         SDL_FillRect(surface, NULL, SDL_MapRGB(surface->format, 0, 0, 0));
-        for (int i = 0; i < 800 * 600; i++) zbuffer[i] = 1e30f;
+        limpiar_zbuffer(zbuffer, 800 * 600);
 
         Uint32 color_blanco    = SDL_MapRGB(surface->format, 255, 255, 255);
         float  distancia_focal = 300.0f;

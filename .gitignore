@@ -1,0 +1,5 @@
+visor
+modelo.obj
+test/bench
+test/bench_o0
+*.o
